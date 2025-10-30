@@ -11,7 +11,7 @@ const Map = dynamic(() => import("./Map"), {
 export default function Home() {
   return (
     <div className={styles.page}>
-      <Map position={[51.505, -0.09]} zoom={13} />
+      <Map position={[-0.09, 51.505]} zoom={13} />
     </div>
   );
 }
