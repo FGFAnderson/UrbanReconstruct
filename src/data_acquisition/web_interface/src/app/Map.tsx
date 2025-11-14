@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react"
 import maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
+import JSZip from "jszip"
 
 interface MapProps {
   position: [number, number];
@@ -53,6 +54,8 @@ export default function Map({ position, zoom }: MapProps) {
 
       setDownloadProgress({ current: 0, total: imageData.length })
 
+      const zip = new JSZip()
+
       for (let i = 0; i < imageData.length; i++) {
         const imageInfo = imageData[i]
         setDownloadProgress({ current: i + 1, total: imageData.length })
@@ -66,14 +69,8 @@ export default function Map({ position, zoom }: MapProps) {
             const imageResponse = await fetch(data.thumb_2048_url)
             const blob = await imageResponse.blob()
 
-            const url = URL.createObjectURL(blob)
-            const link = document.createElement("a")
-            link.href = url
-            link.download = `${selectedSequenceId}_${String(i + 1).padStart(4, "0")}_${imageInfo.id}.jpg`
-            document.body.appendChild(link)
-            link.click()
-            document.body.removeChild(link)
-            URL.revokeObjectURL(url)
+            const filename = `${selectedSequenceId}_${String(i + 1).padStart(4, "0")}_${imageInfo.id}.jpg`
+            zip.file(filename, blob)
 
             await new Promise(resolve => setTimeout(resolve, 500))
           }
@@ -82,7 +79,15 @@ export default function Map({ position, zoom }: MapProps) {
         }
       }
 
-      alert(`Successfully downloaded ${imageData.length} images!`)
+      const zipBlob = await zip.generateAsync({ type: "blob" })
+      const url = URL.createObjectURL(zipBlob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `mapillary_sequence_${selectedSequenceId}.zip`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
     } catch (error) {
       console.error("Error downloading sequence:", error)
       alert("Failed to download sequence images")
