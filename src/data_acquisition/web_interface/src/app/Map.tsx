@@ -10,8 +10,87 @@ interface MapProps {
 
 export default function Map({ position, zoom }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<maplibregl.Map>()
+  const mapRef = useRef<maplibregl.Map>(null)
   const [selectedSequenceId, setSelectedSequenceId] = useState<string | null>(null)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 })
+  const [imageCount, setImageCount] = useState(0)
+
+  const downloadImages = async () => {
+    if (!selectedSequenceId) return
+    
+    setIsDownloading(true)
+    setDownloadProgress({ current: 0, total: 0 })
+    
+    try {
+      const map = mapRef.current
+      if (!map) return
+
+      const token = process.env.NEXT_PUBLIC_MAPILLARY_TOKEN
+      if (!token) {
+        alert("Mapillary token not found, set in .env")
+        return
+      }
+
+      const features = map.querySourceFeatures("mapillary", {
+        sourceLayer: "image",
+        filter: [
+          "all",
+          ["==", ["get", "is_pano"], true],
+          ["==", ["get", "sequence_id"], selectedSequenceId]
+        ]
+      })
+
+      const imageData = features
+        .map(feature => ({
+          id: feature.properties?.id,
+          captured_at: feature.properties?.captured_at,
+          compass_angle: feature.properties?.compass_angle,
+          coordinates: feature.geometry.type === "Point" ? feature.geometry.coordinates : null
+        }))
+        .filter(img => img.id)
+        .sort((a, b) => (a.captured_at || 0) - (b.captured_at || 0))
+
+      setDownloadProgress({ current: 0, total: imageData.length })
+
+      for (let i = 0; i < imageData.length; i++) {
+        const imageInfo = imageData[i]
+        setDownloadProgress({ current: i + 1, total: imageData.length })
+
+        try {
+          const imageUrl = `https://graph.mapillary.com/${imageInfo.id}?fields=thumb_2048_url&access_token=${token}`
+          const response = await fetch(imageUrl)
+          const data = await response.json()
+
+          if (data.thumb_2048_url) {
+            const imageResponse = await fetch(data.thumb_2048_url)
+            const blob = await imageResponse.blob()
+
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement("a")
+            link.href = url
+            link.download = `${selectedSequenceId}_${String(i + 1).padStart(4, "0")}_${imageInfo.id}.jpg`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(url)
+
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
+        } catch (error) {
+          console.error(`Error downloading image ${imageInfo.id}:`, error)
+        }
+      }
+
+      alert(`Successfully downloaded ${imageData.length} images!`)
+    } catch (error) {
+      console.error("Error downloading sequence:", error)
+      alert("Failed to download sequence images")
+    } finally {
+      setIsDownloading(false)
+      setDownloadProgress({ current: 0, total: 0 })
+    }
+  }
 
   useEffect(() => {
     if (!mapContainer.current) return
@@ -145,12 +224,23 @@ export default function Map({ position, zoom }: MapProps) {
           ["==", ["get", "is_pano"], true],
           ["==", ["get", "sequence_id"], selectedSequenceId]
         ])
+        
+        const features = map.querySourceFeatures("mapillary", {
+          sourceLayer: "image",
+          filter: [
+            "all",
+            ["==", ["get", "is_pano"], true],
+            ["==", ["get", "sequence_id"], selectedSequenceId]
+          ]
+        })
+        setImageCount(features.length)
       } else {
         map.setFilter("panos-image-highlighted", [
           "all",
           ["==", ["get", "is_pano"], true],
           ["==", ["get", "sequence_id"], ""]
         ])
+        setImageCount(0)
       }
     }
   }, [selectedSequenceId])
@@ -160,5 +250,30 @@ export default function Map({ position, zoom }: MapProps) {
     mapRef.current?.setZoom(zoom)
   }, [position, zoom])
 
-  return <div ref={mapContainer} style={{ width: "100%", height: "100%" }} />
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <div ref={mapContainer} style={{ width: "100%", height: "100%" }} />
+      
+      {selectedSequenceId && (
+        <button
+          onClick={downloadImages}
+          disabled={isDownloading}
+          style={{
+            position: "absolute",
+            top: "10px",
+            right: "10px",
+            padding: "10px 10px",
+            backgroundColor: "#05CB63",
+            color: "white",
+            border: "none",
+            fontWeight: "bold",
+          }}
+        >
+          {isDownloading 
+            ? `Downloading ${downloadProgress.current}/${downloadProgress.total}` 
+            : `Download ${imageCount} Images`}
+        </button>
+      )}
+    </div>
+  )
 }
