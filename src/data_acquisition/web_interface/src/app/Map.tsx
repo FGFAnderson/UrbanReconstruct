@@ -16,6 +16,7 @@ export default function Map({ position, zoom }: MapProps) {
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 })
   const [imageCount, setImageCount] = useState(0)
+  const [showPanosOnly, setShowPanosOnly] = useState(true)
 
   const downloadImages = async () => {
     if (!selectedSequenceId) return
@@ -33,13 +34,13 @@ export default function Map({ position, zoom }: MapProps) {
         return
       }
 
+      const filterConditions = showPanosOnly 
+        ? ["all", ["==", ["get", "is_pano"], true], ["==", ["get", "sequence_id"], selectedSequenceId]]
+        : ["==", ["get", "sequence_id"], selectedSequenceId]
+
       const features = map.querySourceFeatures("mapillary", {
         sourceLayer: "image",
-        filter: [
-          "all",
-          ["==", ["get", "is_pano"], true],
-          ["==", ["get", "sequence_id"], selectedSequenceId]
-        ]
+        filter: filterConditions
       })
 
       const imageData = features
@@ -220,35 +221,32 @@ export default function Map({ position, zoom }: MapProps) {
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map) return
+    if (!map || !map.getLayer("panos-image")) return
 
-    if (map.getLayer("panos-image-highlighted")) {
-      if (selectedSequenceId) {
-        map.setFilter("panos-image-highlighted", [
-          "all",
-          ["==", ["get", "is_pano"], true],
-          ["==", ["get", "sequence_id"], selectedSequenceId]
-        ])
-        
-        const features = map.querySourceFeatures("mapillary", {
-          sourceLayer: "image",
-          filter: [
-            "all",
-            ["==", ["get", "is_pano"], true],
-            ["==", ["get", "sequence_id"], selectedSequenceId]
-          ]
-        })
-        setImageCount(features.length)
-      } else {
-        map.setFilter("panos-image-highlighted", [
-          "all",
-          ["==", ["get", "is_pano"], true],
-          ["==", ["get", "sequence_id"], ""]
-        ])
-        setImageCount(0)
-      }
+    const baseFilter = showPanosOnly ? ["==", ["get", "is_pano"], true] : true
+    map.setFilter("panos-sequence", baseFilter)
+    map.setFilter("panos-image", baseFilter)
+    
+    const highlightFilter = showPanosOnly
+      ? ["all", ["==", ["get", "is_pano"], true], ["==", ["get", "sequence_id"], selectedSequenceId || ""]]
+      : ["==", ["get", "sequence_id"], selectedSequenceId || ""]
+    map.setFilter("panos-image-highlighted", highlightFilter)
+
+    // Update image count
+    if (selectedSequenceId) {
+      const filterConditions = showPanosOnly 
+        ? ["all", ["==", ["get", "is_pano"], true], ["==", ["get", "sequence_id"], selectedSequenceId]]
+        : ["==", ["get", "sequence_id"], selectedSequenceId]
+
+      const features = map.querySourceFeatures("mapillary", {
+        sourceLayer: "image",
+        filter: filterConditions
+      })
+      setImageCount(features.length)
+    } else {
+      setImageCount(0)
     }
-  }, [selectedSequenceId])
+  }, [showPanosOnly, selectedSequenceId])
 
   useEffect(() => {
     mapRef.current?.setCenter(position)
@@ -259,6 +257,24 @@ export default function Map({ position, zoom }: MapProps) {
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <div ref={mapContainer} style={{ width: "100%", height: "100%" }} />
       
+      <button
+        onClick={() => setShowPanosOnly(!showPanosOnly)}
+        style={{
+          position: "absolute",
+          top: "10px",
+          left: "10px",
+          padding: "10px 15px",
+          backgroundColor: showPanosOnly ? "#05CB63" : "#666",
+          color: "white",
+          border: "none",
+          fontWeight: "bold",
+          cursor: "pointer",
+          borderRadius: "4px",
+        }}
+      >
+        {showPanosOnly ? "Panos Only" : "All Images"}
+      </button>
+
       {selectedSequenceId && (
         <button
           onClick={downloadImages}
@@ -267,11 +283,14 @@ export default function Map({ position, zoom }: MapProps) {
             position: "absolute",
             top: "10px",
             right: "10px",
-            padding: "10px 10px",
+            padding: "10px 15px",
             backgroundColor: "#05CB63",
             color: "white",
             border: "none",
             fontWeight: "bold",
+            cursor: isDownloading ? "not-allowed" : "pointer",
+            opacity: isDownloading ? 0.7 : 1,
+            borderRadius: "4px",
           }}
         >
           {isDownloading 
