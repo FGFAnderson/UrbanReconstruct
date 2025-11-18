@@ -100,6 +100,80 @@ export default function Map({ position, zoom }: MapProps) {
     }
   }
 
+  const downloadBoxImages = async () => {
+    if (!boxCoords) return
+    
+    setIsDownloading(true)
+    setDownloadProgress({ current: 0, total: 0 })
+    
+    try {
+      const token = process.env.NEXT_PUBLIC_MAPILLARY_TOKEN
+      if (!token) {
+        alert("Mapillary token not found, set in .env")
+        return
+      }
+
+      const [minLng, minLat, maxLng, maxLat] = boxCoords
+      const bbox = `${minLng},${minLat},${maxLng},${maxLat}`
+      
+      const fields = "id,captured_at,thumb_2048_url"
+      const isPanoParam = showPanosOnly ? "&is_pano=true" : ""
+      const url = `https://graph.mapillary.com/images?bbox=${bbox}&access_token=${token}&fields=${fields}&limit=2000${isPanoParam}`
+      
+      const response = await fetch(url)
+      const data = await response.json()
+
+      if (!data.data || data.data.length === 0) {
+        alert("No images found in selected area")
+        return
+      }
+
+      const imageData = data.data.sort((a: any, b: any) => a.captured_at - b.captured_at)
+      setDownloadProgress({ current: 0, total: imageData.length })
+
+      const zip = new JSZip()
+
+      for (let i = 0; i < imageData.length; i++) {
+        const imageInfo = imageData[i]
+        setDownloadProgress({ current: i + 1, total: imageData.length })
+
+        try {
+          const imageUrl = `https://graph.mapillary.com/${imageInfo.id}?fields=thumb_2048_url&access_token=${token}`
+          const imageResponse = await fetch(imageUrl)
+          const imageData = await imageResponse.json()
+
+          if (imageData.thumb_2048_url) {
+            const imageBlob = await fetch(imageData.thumb_2048_url)
+            const blob = await imageBlob.blob()
+
+            const filename = `${String(i + 1).padStart(4, "0")}_${imageInfo.id}.jpg`
+            zip.file(filename, blob)
+
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
+        } catch (error) {
+          console.error(`Error downloading image ${imageInfo.id}:`, error)
+        }
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" })
+      const downloadUrl = URL.createObjectURL(zipBlob)
+      const link = document.createElement("a")
+      link.href = downloadUrl
+      link.download = `mapillary_bbox_${Date.now()}.zip`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      console.error("Error downloading bbox images:", error)
+      alert("Failed to download images from selected area")
+    } finally {
+      setIsDownloading(false)
+      setDownloadProgress({ current: 0, total: 0 })
+    }
+  }
+
   useEffect(() => {
     if (!mapContainer.current) return
 
@@ -242,10 +316,10 @@ export default function Map({ position, zoom }: MapProps) {
         currentLngLat = e.lngLat
         
         // Remove existing box if any
-        if (map.getSource('temp-bbox')) {
-          map.removeLayer('temp-bbox-fill')
-          map.removeLayer('temp-bbox-outline')
-          map.removeSource('temp-bbox')
+        if (map.getSource("temp-bbox")) {
+          map.removeLayer("temp-bbox-fill")
+          map.removeLayer("temp-bbox-outline")
+          map.removeSource("temp-bbox")
         }
       }
 
@@ -260,10 +334,10 @@ export default function Map({ position, zoom }: MapProps) {
         const maxLat = Math.max(startLngLat.lat, currentLngLat.lat)
 
         const boxData = {
-          type: 'Feature' as const,
+          type: "Feature" as const,
           properties: {},
           geometry: {
-            type: 'Polygon' as const,
+            type: "Polygon" as const,
             coordinates: [[
               [minLng, minLat],
               [maxLng, minLat],
@@ -274,32 +348,32 @@ export default function Map({ position, zoom }: MapProps) {
           }
         }
 
-        if (map.getSource('temp-bbox')) {
-          (map.getSource('temp-bbox') as maplibregl.GeoJSONSource).setData(boxData)
+        if (map.getSource("temp-bbox")) {
+          (map.getSource("temp-bbox") as maplibregl.GeoJSONSource).setData(boxData)
         } else {
-          map.addSource('temp-bbox', {
-            type: 'geojson',
+          map.addSource("temp-bbox", {
+            type: "geojson",
             data: boxData
           })
 
           map.addLayer({
-            id: 'temp-bbox-fill',
-            type: 'fill',
-            source: 'temp-bbox',
+            id: "temp-bbox-fill",
+            type: "fill",
+            source: "temp-bbox",
             paint: {
-              'fill-color': '#05CB63',
-              'fill-opacity': 0.1
+              "fill-color": "#05CB63",
+              "fill-opacity": 0.1
             }
           })
 
           map.addLayer({
-            id: 'temp-bbox-outline',
-            type: 'line',
-            source: 'temp-bbox',
+            id: "temp-bbox-outline",
+            type: "line",
+            source: "temp-bbox",
             paint: {
-              'line-color': '#05CB63',
-              'line-width': 2,
-              'line-dasharray': [2, 2]
+              "line-color": "#05CB63",
+              "line-width": 2,
+              "line-dasharray": [2, 2]
             }
           })
         }
@@ -318,26 +392,26 @@ export default function Map({ position, zoom }: MapProps) {
         setBoxCoords([minLng, minLat, maxLng, maxLat])
 
         // Remove temp box
-        if (map.getSource('temp-bbox')) {
-          map.removeLayer('temp-bbox-fill')
-          map.removeLayer('temp-bbox-outline')
-          map.removeSource('temp-bbox')
+        if (map.getSource("temp-bbox")) {
+          map.removeLayer("temp-bbox-fill")
+          map.removeLayer("temp-bbox-outline")
+          map.removeSource("temp-bbox")
         }
 
         // Add final box
-        if (map.getSource('bbox')) {
-          map.removeLayer('bbox-fill')
-          map.removeLayer('bbox-outline')
-          map.removeSource('bbox')
+        if (map.getSource("bbox")) {
+          map.removeLayer("bbox-fill")
+          map.removeLayer("bbox-outline")
+          map.removeSource("bbox")
         }
 
-        map.addSource('bbox', {
-          type: 'geojson',
+        map.addSource("bbox", {
+          type: "geojson",
           data: {
-            type: 'Feature',
+            type: "Feature",
             properties: {},
             geometry: {
-              type: 'Polygon',
+              type: "Polygon",
               coordinates: [[
                 [minLng, minLat],
                 [maxLng, minLat],
@@ -350,22 +424,22 @@ export default function Map({ position, zoom }: MapProps) {
         })
 
         map.addLayer({
-          id: 'bbox-fill',
-          type: 'fill',
-          source: 'bbox',
+          id: "bbox-fill",
+          type: "fill",
+          source: "bbox",
           paint: {
-            'fill-color': '#05CB63',
-            'fill-opacity': 0.2
+            "fill-color": "#05CB63",
+            "fill-opacity": 0.2
           }
         })
 
         map.addLayer({
-          id: 'bbox-outline',
-          type: 'line',
-          source: 'bbox',
+          id: "bbox-outline",
+          type: "line",
+          source: "bbox",
           paint: {
-            'line-color': '#05CB63',
-            'line-width': 3
+            "line-color": "#05CB63",
+            "line-width": 3
           }
         })
 
@@ -374,14 +448,14 @@ export default function Map({ position, zoom }: MapProps) {
         currentLngLat = null
       }
 
-      map.on('mousedown', onMouseDown)
-      map.on('mousemove', onMouseMove)
-      map.on('mouseup', onMouseUp)
+      map.on("mousedown", onMouseDown)
+      map.on("mousemove", onMouseMove)
+      map.on("mouseup", onMouseUp)
 
       return () => {
-        map.off('mousedown', onMouseDown)
-        map.off('mousemove', onMouseMove)
-        map.off('mouseup', onMouseUp)
+        map.off("mousedown", onMouseDown)
+        map.off("mousemove", onMouseMove)
+        map.off("mouseup", onMouseUp)
         map.dragPan.enable()
         map.boxZoom.enable()
         map.doubleClickZoom.enable()
@@ -454,10 +528,10 @@ export default function Map({ position, zoom }: MapProps) {
             if (!isDrawingBox) {
               setBoxCoords(null)
               const map = mapRef.current
-              if (map?.getSource('bbox')) {
-                map.removeLayer('bbox-fill')
-                map.removeLayer('bbox-outline')
-                map.removeSource('bbox')
+              if (map?.getSource("bbox")) {
+                map.removeLayer("bbox-fill")
+                map.removeLayer("bbox-outline")
+                map.removeSource("bbox")
               }
             }
           }}
@@ -497,6 +571,26 @@ export default function Map({ position, zoom }: MapProps) {
           </button>
         )}
 
+        {boxCoords && (
+          <button
+            onClick={downloadBoxImages}
+            disabled={isDownloading}
+            style={{
+              padding: "10px 15px",
+              backgroundColor: "#FFD700",
+              color: "#333",
+              border: "none",
+              fontWeight: "bold",
+              cursor: isDownloading ? "not-allowed" : "pointer",
+              opacity: isDownloading ? 0.7 : 1,
+              borderRadius: "4px",
+            }}
+          >
+            {isDownloading 
+              ? `Downloading ${downloadProgress.current}/${downloadProgress.total}` 
+              : "Download Box"}
+          </button>
+        )}
       </div>
     </div>
   )
