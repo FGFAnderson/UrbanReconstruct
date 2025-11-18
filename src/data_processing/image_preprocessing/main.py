@@ -1,3 +1,4 @@
+import argparse
 import os
 import cv2
 import py360convert
@@ -42,8 +43,7 @@ def prepare_images_for_colmap(input_dir: str, output_dir: str) -> None:
             
             # Extract front, right, back, left images
             for angle, direction in [(0, 'front'), (90, 'right'), (180, 'back'), (270, 'left')]:
-                view = py360convert.e2p(img, fov_deg=90, u_deg=angle, v_deg=0, 
-                                       out_hw=(1024, 1024), mode='bilinear')
+                view = py360convert.e2p(img, fov_deg=90, u_deg=angle, v_deg=0, out_hw=(1024, 1024), mode='bilinear')
                 output_name = f"{os.path.splitext(filename)[0]}_{direction}.jpg"
                 cv2.imwrite(os.path.join(output_dir, output_name), view)
         else:
@@ -52,8 +52,28 @@ def prepare_images_for_colmap(input_dir: str, output_dir: str) -> None:
             cv2.imwrite(os.path.join(output_dir, filename), img)
 
 def main():
-    prepare_images_for_colmap("./bbox_images", "./images")
-
+    parser = argparse.ArgumentParser(
+        description='Convert 360 images to rectilinear perspective for COLMAP processing'
+    )
+    parser.add_argument(
+        'input_dir',
+        type=str,
+        help='Input directory containing images'
+    )
+    parser.add_argument(
+        'output_dir',
+        type=str,
+        help='Output directory for processed images'
+    )
+    
+    args = parser.parse_args()
+    
+    if not os.path.isdir(args.input_dir):
+        print(f"Error: Input directory '{args.input_dir}' does not exist")
+        return
+    
+    prepare_images_for_colmap(args.input_dir, args.output_dir)
+    print(f"Done! Processed images saved to '{args.output_dir}'")
 
 if __name__ == "__main__":
     main()
