@@ -17,6 +17,8 @@ export default function Map({ position, zoom }: MapProps) {
   const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 })
   const [imageCount, setImageCount] = useState(0)
   const [showPanosOnly, setShowPanosOnly] = useState(true)
+  const [isDrawingBox, setIsDrawingBox] = useState(false)
+  const [boxCoords, setBoxCoords] = useState<[number, number, number, number] | null>(null)
 
   const downloadImages = async () => {
     if (!selectedSequenceId) return
@@ -142,7 +144,7 @@ export default function Map({ position, zoom }: MapProps) {
         "source-layer": "sequence",
         minzoom: 6,
         maxzoom: 14,
-        filter: ["==", ["get", "is_pano"], true],
+        filter: ["==", ["get", "is_pano"], true] as any,
         paint: {
           "line-width": [
             "interpolate",
@@ -162,7 +164,7 @@ export default function Map({ position, zoom }: MapProps) {
         type: "circle",
         source: "mapillary",
         "source-layer": "image",
-        filter: ["==", ["get", "is_pano"], true],
+        filter: ["==", ["get", "is_pano"], true] as any,
         paint: {
           "circle-radius": [
             "interpolate",
@@ -185,7 +187,7 @@ export default function Map({ position, zoom }: MapProps) {
         filter: ["all",
           ["==", ["get", "is_pano"], true],
           ["==", ["get", "sequence_id"], ""]
-        ],
+        ] as any,
         paint: {
           "circle-radius": [
             "interpolate",
@@ -201,12 +203,13 @@ export default function Map({ position, zoom }: MapProps) {
       })
 
       map.on("mouseenter", "panos-image", () => {
-        map.getCanvas().style.cursor = "pointer"
+        if (!isDrawingBox) map.getCanvas().style.cursor = "pointer"
       })
       map.on("mouseleave", "panos-image", () => {
-        map.getCanvas().style.cursor = ""
+        if (!isDrawingBox) map.getCanvas().style.cursor = ""
       })
       map.on("click", "panos-image", (e) => {
+        if (isDrawingBox) return
         const feature = e.features?.[0]
         if (feature?.properties) {
           const sequenceId = feature.properties.sequence_id
@@ -219,20 +222,192 @@ export default function Map({ position, zoom }: MapProps) {
     return () => map.remove()
   }, [])
 
+  // Handle box drawing
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    if (isDrawingBox) {
+      // Disable map interactions
+      map.dragPan.disable()
+      map.boxZoom.disable()
+      map.doubleClickZoom.disable()
+      map.getCanvas().style.cursor = "crosshair"
+
+      let startLngLat: maplibregl.LngLat | null = null
+      let currentLngLat: maplibregl.LngLat | null = null
+
+      const onMouseDown = (e: maplibregl.MapMouseEvent) => {
+        startLngLat = e.lngLat
+        currentLngLat = e.lngLat
+        
+        // Remove existing box if any
+        if (map.getSource('temp-bbox')) {
+          map.removeLayer('temp-bbox-fill')
+          map.removeLayer('temp-bbox-outline')
+          map.removeSource('temp-bbox')
+        }
+      }
+
+      const onMouseMove = (e: maplibregl.MapMouseEvent) => {
+        if (!startLngLat) return
+        
+        currentLngLat = e.lngLat
+
+        const minLng = Math.min(startLngLat.lng, currentLngLat.lng)
+        const maxLng = Math.max(startLngLat.lng, currentLngLat.lng)
+        const minLat = Math.min(startLngLat.lat, currentLngLat.lat)
+        const maxLat = Math.max(startLngLat.lat, currentLngLat.lat)
+
+        const boxData = {
+          type: 'Feature' as const,
+          properties: {},
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: [[
+              [minLng, minLat],
+              [maxLng, minLat],
+              [maxLng, maxLat],
+              [minLng, maxLat],
+              [minLng, minLat]
+            ]]
+          }
+        }
+
+        if (map.getSource('temp-bbox')) {
+          (map.getSource('temp-bbox') as maplibregl.GeoJSONSource).setData(boxData)
+        } else {
+          map.addSource('temp-bbox', {
+            type: 'geojson',
+            data: boxData
+          })
+
+          map.addLayer({
+            id: 'temp-bbox-fill',
+            type: 'fill',
+            source: 'temp-bbox',
+            paint: {
+              'fill-color': '#05CB63',
+              'fill-opacity': 0.1
+            }
+          })
+
+          map.addLayer({
+            id: 'temp-bbox-outline',
+            type: 'line',
+            source: 'temp-bbox',
+            paint: {
+              'line-color': '#05CB63',
+              'line-width': 2,
+              'line-dasharray': [2, 2]
+            }
+          })
+        }
+      }
+
+      const onMouseUp = (e: maplibregl.MapMouseEvent) => {
+        if (!startLngLat) return
+
+        currentLngLat = e.lngLat
+
+        const minLng = Math.min(startLngLat.lng, currentLngLat.lng)
+        const maxLng = Math.max(startLngLat.lng, currentLngLat.lng)
+        const minLat = Math.min(startLngLat.lat, currentLngLat.lat)
+        const maxLat = Math.max(startLngLat.lat, currentLngLat.lat)
+
+        setBoxCoords([minLng, minLat, maxLng, maxLat])
+
+        // Remove temp box
+        if (map.getSource('temp-bbox')) {
+          map.removeLayer('temp-bbox-fill')
+          map.removeLayer('temp-bbox-outline')
+          map.removeSource('temp-bbox')
+        }
+
+        // Add final box
+        if (map.getSource('bbox')) {
+          map.removeLayer('bbox-fill')
+          map.removeLayer('bbox-outline')
+          map.removeSource('bbox')
+        }
+
+        map.addSource('bbox', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'Polygon',
+              coordinates: [[
+                [minLng, minLat],
+                [maxLng, minLat],
+                [maxLng, maxLat],
+                [minLng, maxLat],
+                [minLng, minLat]
+              ]]
+            }
+          }
+        })
+
+        map.addLayer({
+          id: 'bbox-fill',
+          type: 'fill',
+          source: 'bbox',
+          paint: {
+            'fill-color': '#05CB63',
+            'fill-opacity': 0.2
+          }
+        })
+
+        map.addLayer({
+          id: 'bbox-outline',
+          type: 'line',
+          source: 'bbox',
+          paint: {
+            'line-color': '#05CB63',
+            'line-width': 3
+          }
+        })
+
+        setIsDrawingBox(false)
+        startLngLat = null
+        currentLngLat = null
+      }
+
+      map.on('mousedown', onMouseDown)
+      map.on('mousemove', onMouseMove)
+      map.on('mouseup', onMouseUp)
+
+      return () => {
+        map.off('mousedown', onMouseDown)
+        map.off('mousemove', onMouseMove)
+        map.off('mouseup', onMouseUp)
+        map.dragPan.enable()
+        map.boxZoom.enable()
+        map.doubleClickZoom.enable()
+        map.getCanvas().style.cursor = ""
+      }
+    } else {
+      map.dragPan.enable()
+      map.boxZoom.enable()
+      map.doubleClickZoom.enable()
+      map.getCanvas().style.cursor = ""
+    }
+  }, [isDrawingBox])
+
   useEffect(() => {
     const map = mapRef.current
     if (!map || !map.getLayer("panos-image")) return
 
-    const baseFilter = showPanosOnly ? ["==", ["get", "is_pano"], true] : true
-    map.setFilter("panos-sequence", baseFilter)
-    map.setFilter("panos-image", baseFilter)
+    const baseFilter = showPanosOnly ? ["==", ["get", "is_pano"], true] : ["has", "id"]
+    map.setFilter("panos-sequence", baseFilter as any)
+    map.setFilter("panos-image", baseFilter as any)
     
     const highlightFilter = showPanosOnly
       ? ["all", ["==", ["get", "is_pano"], true], ["==", ["get", "sequence_id"], selectedSequenceId || ""]]
       : ["==", ["get", "sequence_id"], selectedSequenceId || ""]
-    map.setFilter("panos-image-highlighted", highlightFilter)
+    map.setFilter("panos-image-highlighted", highlightFilter as any)
 
-    // Update image count
     if (selectedSequenceId) {
       const filterConditions = showPanosOnly 
         ? ["all", ["==", ["get", "is_pano"], true], ["==", ["get", "sequence_id"], selectedSequenceId]]
@@ -240,7 +415,7 @@ export default function Map({ position, zoom }: MapProps) {
 
       const features = map.querySourceFeatures("mapillary", {
         sourceLayer: "image",
-        filter: filterConditions
+        filter: filterConditions as any
       })
       setImageCount(features.length)
     } else {
@@ -257,47 +432,72 @@ export default function Map({ position, zoom }: MapProps) {
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <div ref={mapContainer} style={{ width: "100%", height: "100%" }} />
       
-      <button
-        onClick={() => setShowPanosOnly(!showPanosOnly)}
-        style={{
-          position: "absolute",
-          top: "10px",
-          left: "10px",
-          padding: "10px 15px",
-          backgroundColor: showPanosOnly ? "#05CB63" : "#666",
-          color: "white",
-          border: "none",
-          fontWeight: "bold",
-          cursor: "pointer",
-          borderRadius: "4px",
-        }}
-      >
-        {showPanosOnly ? "Panos Only" : "All Images"}
-      </button>
-
-      {selectedSequenceId && (
+      <div style={{ position: "absolute", top: "10px", left: "10px", display: "flex", gap: "10px" }}>
         <button
-          onClick={downloadImages}
-          disabled={isDownloading}
+          onClick={() => setShowPanosOnly(!showPanosOnly)}
           style={{
-            position: "absolute",
-            top: "10px",
-            right: "10px",
             padding: "10px 15px",
-            backgroundColor: "#05CB63",
+            backgroundColor: showPanosOnly ? "#05CB63" : "#666",
             color: "white",
             border: "none",
             fontWeight: "bold",
-            cursor: isDownloading ? "not-allowed" : "pointer",
-            opacity: isDownloading ? 0.7 : 1,
+            cursor: "pointer",
             borderRadius: "4px",
           }}
         >
-          {isDownloading 
-            ? `Downloading ${downloadProgress.current}/${downloadProgress.total}` 
-            : `Download ${imageCount} Images`}
+          {showPanosOnly ? "Panos Only" : "All Images"}
         </button>
-      )}
+
+        <button
+          onClick={() => {
+            setIsDrawingBox(!isDrawingBox)
+            if (!isDrawingBox) {
+              setBoxCoords(null)
+              const map = mapRef.current
+              if (map?.getSource('bbox')) {
+                map.removeLayer('bbox-fill')
+                map.removeLayer('bbox-outline')
+                map.removeSource('bbox')
+              }
+            }
+          }}
+          style={{
+            padding: "10px 15px",
+            backgroundColor: isDrawingBox ? "#FF6B00" : "#05CB63",
+            color: "white",
+            border: "none",
+            fontWeight: "bold",
+            cursor: "pointer",
+            borderRadius: "4px",
+          }}
+        >
+          {isDrawingBox ? "Cancel Box" : "Draw Box"}
+        </button>
+      </div>
+
+      <div style={{ position: "absolute", top: "10px", right: "10px", display: "flex", gap: "10px" }}>
+        {selectedSequenceId && (
+          <button
+            onClick={downloadImages}
+            disabled={isDownloading}
+            style={{
+              padding: "10px 15px",
+              backgroundColor: "#05CB63",
+              color: "white",
+              border: "none",
+              fontWeight: "bold",
+              cursor: isDownloading ? "not-allowed" : "pointer",
+              opacity: isDownloading ? 0.7 : 1,
+              borderRadius: "4px",
+            }}
+          >
+            {isDownloading 
+              ? `Downloading ${downloadProgress.current}/${downloadProgress.total}` 
+              : `Download Sequence (${imageCount})`}
+          </button>
+        )}
+
+      </div>
     </div>
   )
 }
