@@ -6,3 +6,5 @@ The: UrbanReconstruct is an Urban 3D Reconstruction tool using street map data, 
 That: delivers realistic 3d city meshes much faster and cheaper than traditional 3d modelling methods.<br>
 
 Supervisor: Vivek Singh
+
+Make sure to create a .env file based on .env.example
