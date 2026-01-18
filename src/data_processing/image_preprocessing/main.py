@@ -32,7 +32,7 @@ def prepare_images_for_colmap(input_dir: str, output_dir: str) -> None:
     os.makedirs(output_dir, exist_ok=True)
     
     for filename in os.listdir(input_dir):
-        if not filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+        if not filename.lower().endswith((".jpg", ".jpeg", ".png")):
             continue
         
         input_path = os.path.join(input_dir, filename)
@@ -42,8 +42,8 @@ def prepare_images_for_colmap(input_dir: str, output_dir: str) -> None:
             img = cv2.imread(input_path)
             
             # Extract front, right, back, left images
-            for angle, direction in [(0, 'front'), (90, 'right'), (180, 'back'), (270, 'left')]:
-                view = py360convert.e2p(img, fov_deg=90, u_deg=angle, v_deg=0, out_hw=(1024, 1024), mode='bilinear')
+            for angle, direction in [(0, "front"), (90, "right"), (180, "back"), (270, "left")]:
+                view = py360convert.e2p(img, fov_deg=90, u_deg=angle, v_deg=0, out_hw=(1024, 1024), mode="bilinear")
                 output_name = f"{os.path.splitext(filename)[0]}_{direction}.jpg"
                 cv2.imwrite(os.path.join(output_dir, output_name), view)
         else:
@@ -53,17 +53,17 @@ def prepare_images_for_colmap(input_dir: str, output_dir: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Convert 360 images to rectilinear perspective for COLMAP processing'
+        description="Convert 360 images to rectilinear perspective for COLMAP processing"
     )
     parser.add_argument(
-        'input_dir',
+        "input_dir",
         type=str,
-        help='Input directory containing images'
+        help="Input directory containing images"
     )
     parser.add_argument(
-        'output_dir',
+        "output_dir",
         type=str,
-        help='Output directory for processed images'
+        help="Output directory for processed images"
     )
     
     args = parser.parse_args()
