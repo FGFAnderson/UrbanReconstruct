@@ -1,7 +1,14 @@
 [project]
-name = "carla"
+name = "carla_sim"
 version = "0.1.0"
 description = "captures images inside the carla simulator to be used for validation dataset"
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = []
+requires-python = "==3.10.*"
+dependencies = [
+    "carla",
+    "numpy>=1.21.6",
+    "pygame>=2.6.1",
+]
+
+[tool.uv.sources]
+carla = { path = "../../../../../../carla/Carla-0.10.0-Linux-Shipping/PythonAPI/carla/dist/carla-0.10.0-cp310-cp310-linux_x86_64.whl" }
