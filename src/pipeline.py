@@ -5,8 +5,10 @@ from typing import Any
 
 @dataclass
 class PipelineContext:
-    image_paths: list[Path]
+    input_dir: str
     errors: list[str] = field(default_factory=list)
+    glb_path: str | None = None
+    data: dict[str, Any] = field(default_factory=dict)
 
 
 class Stage:

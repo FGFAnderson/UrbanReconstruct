@@ -1,2 +1,6 @@
 .env
 *.pt
+*.png
+__pycache__/
+*.egg-info/
+*.glb

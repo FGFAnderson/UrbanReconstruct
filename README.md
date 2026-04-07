@@ -8,3 +8,8 @@ That: delivers realistic 3d city meshes much faster and cheaper than traditional
 Supervisor: Vivek Singh
 
 Make sure to create a .env file based on .env.example
+
+To run:
+```
+uv run urbanreconstruct
+```
