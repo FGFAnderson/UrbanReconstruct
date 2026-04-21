@@ -2,14 +2,14 @@
 Example script to run MapAnything inference through the pipeline.
 """
 
-from .stages.mapanything_inference import MapAnythingStage
 from .pipeline import Pipeline, PipelineContext
+from .stages.mapanything_inference import MapAnythingStage
 
 
 def main():
     """Run MapAnything inference pipeline."""
     # Configuration
-    INPUT_DIR = "/home/fin/doccuments/work/UrbanReconstruct/src/data_acquisition/carla_sim/out/20260407_035018"
+    INPUT_DIR = "/home/fin/doccuments/work/UrbanReconstruct/src/data_acquisition/carla_sim/out/20260409_035802"
     GLB_PATH = "output.glb"
     RESOLUTION = 518
 

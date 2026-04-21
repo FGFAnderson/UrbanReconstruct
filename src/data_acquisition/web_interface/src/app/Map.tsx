@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState } from "react"
 import maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
-import JSZip from "jszip"
 
 interface MapProps {
   position: [number, number];
@@ -12,165 +11,46 @@ interface MapProps {
 export default function Map({ position, zoom }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map>(null)
-  const [selectedSequenceId, setSelectedSequenceId] = useState<string | null>(null)
   const [isDownloading, setIsDownloading] = useState(false)
-  const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 })
-  const [imageCount, setImageCount] = useState(0)
   const [showPanosOnly, setShowPanosOnly] = useState(true)
   const [isDrawingBox, setIsDrawingBox] = useState(false)
   const [boxCoords, setBoxCoords] = useState<[number, number, number, number] | null>(null)
 
-  const downloadImages = async () => {
-    if (!selectedSequenceId) return
-    
-    setIsDownloading(true)
-    setDownloadProgress({ current: 0, total: 0 })
-    
-    try {
-      const map = mapRef.current
-      if (!map) return
-
-      const token = process.env.NEXT_PUBLIC_MAPILLARY_TOKEN
-      if (!token) {
-        alert("Mapillary token not found, set in .env")
-        return
-      }
-
-      const filterConditions = showPanosOnly 
-        ? ["all", ["==", ["get", "is_pano"], true], ["==", ["get", "sequence_id"], selectedSequenceId]]
-        : ["==", ["get", "sequence_id"], selectedSequenceId]
-
-      const features = map.querySourceFeatures("mapillary", {
-        sourceLayer: "image",
-        filter: filterConditions
-      })
-
-      const imageData = features
-        .map(feature => ({
-          id: feature.properties?.id,
-          captured_at: feature.properties?.captured_at,
-          compass_angle: feature.properties?.compass_angle,
-          coordinates: feature.geometry.type === "Point" ? feature.geometry.coordinates : null
-        }))
-        .filter(img => img.id)
-        .sort((a, b) => (a.captured_at || 0) - (b.captured_at || 0))
-
-      setDownloadProgress({ current: 0, total: imageData.length })
-
-      const zip = new JSZip()
-
-      for (let i = 0; i < imageData.length; i++) {
-        const imageInfo = imageData[i]
-        setDownloadProgress({ current: i + 1, total: imageData.length })
-
-        try {
-          const imageUrl = `https://graph.mapillary.com/${imageInfo.id}?fields=thumb_2048_url&access_token=${token}`
-          const response = await fetch(imageUrl)
-          const data = await response.json()
-
-          if (data.thumb_2048_url) {
-            const imageResponse = await fetch(data.thumb_2048_url)
-            const blob = await imageResponse.blob()
-
-            const filename = `${selectedSequenceId}_${String(i + 1).padStart(4, "0")}_${imageInfo.id}.jpg`
-            zip.file(filename, blob)
-
-            await new Promise(resolve => setTimeout(resolve, 500))
-          }
-        } catch (error) {
-          console.error(`Error downloading image ${imageInfo.id}:`, error)
-        }
-      }
-
-      const zipBlob = await zip.generateAsync({ type: "blob" })
-      const url = URL.createObjectURL(zipBlob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `mapillary_sequence_${selectedSequenceId}.zip`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error("Error downloading sequence:", error)
-      alert("Failed to download sequence images")
-    } finally {
-      setIsDownloading(false)
-      setDownloadProgress({ current: 0, total: 0 })
-    }
-  }
-
   const downloadBoxImages = async () => {
     if (!boxCoords) return
-    
+
+    const token = process.env.NEXT_PUBLIC_MAPILLARY_TOKEN
+    if (!token) {
+      alert("Mapillary token not found, set in .env")
+      return
+    }
+
     setIsDownloading(true)
-    setDownloadProgress({ current: 0, total: 0 })
-    
+
     try {
-      const token = process.env.NEXT_PUBLIC_MAPILLARY_TOKEN
-      if (!token) {
-        alert("Mapillary token not found, set in .env")
-        return
-      }
-
       const [minLng, minLat, maxLng, maxLat] = boxCoords
-      const bbox = `${minLng},${minLat},${maxLng},${maxLat}`
-      
-      const fields = "id,captured_at,thumb_2048_url"
-      const isPanoParam = showPanosOnly ? "&is_pano=true" : ""
-      const url = `https://graph.mapillary.com/images?bbox=${bbox}&access_token=${token}&fields=${fields}&limit=2000${isPanoParam}`
-      
-      const response = await fetch(url)
-      const data = await response.json()
+      const areaName = `${minLat.toFixed(4)}_${minLng.toFixed(4)}_${maxLat.toFixed(4)}_${maxLng.toFixed(4)}`
 
-      if (!data.data || data.data.length === 0) {
-        alert("No images found in selected area")
-        return
-      }
+      fetch("/api/images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bbox: boxCoords, token, isPanoOnly: showPanosOnly, areaName })
+      }).then(r => r.json()).then(data => {
+        if (!data.success) console.error("Image download failed:", data.error)
+      }).catch(err => console.error("Image download error:", err))
 
-      const imageData = data.data.sort((a: any, b: any) => a.captured_at - b.captured_at)
-      setDownloadProgress({ current: 0, total: imageData.length })
+      fetch("/api/lidar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bbox: boxCoords, types: ["point_cloud"], areaName })
+      }).then(r => r.json()).then(data => {
+        if (!data.success) console.error("LiDAR download failed:", data.error)
+      }).catch(err => console.error("LiDAR download error:", err))
 
-      const zip = new JSZip()
-
-      for (let i = 0; i < imageData.length; i++) {
-        const imageInfo = imageData[i]
-        setDownloadProgress({ current: i + 1, total: imageData.length })
-
-        try {
-          const imageUrl = `https://graph.mapillary.com/${imageInfo.id}?fields=thumb_2048_url&access_token=${token}`
-          const imageResponse = await fetch(imageUrl)
-          const imageData = await imageResponse.json()
-
-          if (imageData.thumb_2048_url) {
-            const imageBlob = await fetch(imageData.thumb_2048_url)
-            const blob = await imageBlob.blob()
-
-            const filename = `${String(i + 1).padStart(4, "0")}_${imageInfo.id}.jpg`
-            zip.file(filename, blob)
-
-            await new Promise(resolve => setTimeout(resolve, 500))
-          }
-        } catch (error) {
-          console.error(`Error downloading image ${imageInfo.id}:`, error)
-        }
-      }
-
-      const zipBlob = await zip.generateAsync({ type: "blob" })
-      const downloadUrl = URL.createObjectURL(zipBlob)
-      const link = document.createElement("a")
-      link.href = downloadUrl
-      link.download = `mapillary_bbox_${Date.now()}.zip`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(downloadUrl)
-    } catch (error) {
-      console.error("Error downloading bbox images:", error)
-      alert("Failed to download images from selected area")
-    } finally {
       setIsDownloading(false)
-      setDownloadProgress({ current: 0, total: 0 })
+    } catch (error) {
+      console.error("Error starting downloads:", error)
+      setIsDownloading(false)
     }
   }
 
@@ -253,44 +133,6 @@ export default function Map({ position, zoom }: MapProps) {
         }
       })
       
-      map.addLayer({
-        id: "panos-image-highlighted",
-        type: "circle",
-        source: "mapillary",
-        "source-layer": "image",
-        filter: ["all",
-          ["==", ["get", "is_pano"], true],
-          ["==", ["get", "sequence_id"], ""]
-        ] as any,
-        paint: {
-          "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            14, 3,
-            16, 8,
-          ],
-          "circle-color": "#FFD700",
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#FF6B00",
-        }
-      })
-
-      map.on("mouseenter", "panos-image", () => {
-        if (!isDrawingBox) map.getCanvas().style.cursor = "pointer"
-      })
-      map.on("mouseleave", "panos-image", () => {
-        if (!isDrawingBox) map.getCanvas().style.cursor = ""
-      })
-      map.on("click", "panos-image", (e) => {
-        if (isDrawingBox) return
-        const feature = e.features?.[0]
-        if (feature?.properties) {
-          const sequenceId = feature.properties.sequence_id
-          setSelectedSequenceId(sequenceId)
-          console.log("Selected sequence (from image layer):", sequenceId)
-        }
-      })
     })
 
     return () => map.remove()
@@ -477,25 +319,7 @@ export default function Map({ position, zoom }: MapProps) {
     map.setFilter("panos-sequence", baseFilter as any)
     map.setFilter("panos-image", baseFilter as any)
     
-    const highlightFilter = showPanosOnly
-      ? ["all", ["==", ["get", "is_pano"], true], ["==", ["get", "sequence_id"], selectedSequenceId || ""]]
-      : ["==", ["get", "sequence_id"], selectedSequenceId || ""]
-    map.setFilter("panos-image-highlighted", highlightFilter as any)
-
-    if (selectedSequenceId) {
-      const filterConditions = showPanosOnly 
-        ? ["all", ["==", ["get", "is_pano"], true], ["==", ["get", "sequence_id"], selectedSequenceId]]
-        : ["==", ["get", "sequence_id"], selectedSequenceId]
-
-      const features = map.querySourceFeatures("mapillary", {
-        sourceLayer: "image",
-        filter: filterConditions as any
-      })
-      setImageCount(features.length)
-    } else {
-      setImageCount(0)
-    }
-  }, [showPanosOnly, selectedSequenceId])
+  }, [showPanosOnly])
 
   useEffect(() => {
     mapRef.current?.setCenter(position)
@@ -550,27 +374,6 @@ export default function Map({ position, zoom }: MapProps) {
       </div>
 
       <div style={{ position: "absolute", top: "10px", right: "10px", display: "flex", gap: "10px" }}>
-        {selectedSequenceId && (
-          <button
-            onClick={downloadImages}
-            disabled={isDownloading}
-            style={{
-              padding: "10px 15px",
-              backgroundColor: "#05CB63",
-              color: "white",
-              border: "none",
-              fontWeight: "bold",
-              cursor: isDownloading ? "not-allowed" : "pointer",
-              opacity: isDownloading ? 0.7 : 1,
-              borderRadius: "4px",
-            }}
-          >
-            {isDownloading 
-              ? `Downloading ${downloadProgress.current}/${downloadProgress.total}` 
-              : `Download Sequence (${imageCount})`}
-          </button>
-        )}
-
         {boxCoords && (
           <button
             onClick={downloadBoxImages}
