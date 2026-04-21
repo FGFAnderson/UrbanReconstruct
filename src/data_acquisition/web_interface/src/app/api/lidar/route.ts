@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   );
 
   const args = [scriptPath, geojsonPath, "--odir", outputDir];
-  if (types.includes("point_cloud")) args.push("--point-cloud");
+  if (types.includes("point_cloud")) args.push("--national");
 
   return new Promise<NextResponse>((resolve) => {
     const proc = spawn(python, args);

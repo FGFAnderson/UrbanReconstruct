@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const outputDir = join(process.cwd(), "..", "lidar_data", areaName, "images");
+  const outputDir = join(process.cwd(), "..", "geo_data", areaName, "images");
   mkdirSync(outputDir, { recursive: true });
 
   const imageData = data.data.sort(
