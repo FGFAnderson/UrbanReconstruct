@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     }),
   );
 
-  const outputDir = join(process.cwd(), "..", "lidar_data", areaName);
+  const outputDir = join(process.cwd(), "..", "geo_data", areaName);
   mkdirSync(outputDir, { recursive: true });
 
   const scriptPath = join(process.cwd(), "..", "lidar", "ea_lidar.py");
