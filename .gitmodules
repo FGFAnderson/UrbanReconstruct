@@ -1,3 +1,6 @@
 [submodule "src/map_anything"]
 	path = src/map_anything
 	url = https://github.com/facebookresearch/map-anything.git
+[submodule "src/data_acquisition/lidar"]
+	path = src/data_acquisition/lidar
+	url = https://github.com/philwilkes/ea_lidar.git

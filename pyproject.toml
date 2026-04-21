@@ -1,14 +1,44 @@
 [project]
 name = "UrbanReconstruct"
 version = "0.1.0"
-description = "3D reconstruction pipeline using MapAnything"
-requires-python = ">=3.10"
+description = "3D urban reconstruction pipeline"
+requires-python = "==3.10.*"
 dependencies = [
+    # pipelines
     "mapanything",
+
+    # data acquisition - lidar (ea_lidar)
+    "geopandas",
+    "Fiona",
+    "pyproj",
+    "Shapely",
+    "selenium",
+    "webdriver-manager",
+    "chromedriver-binary",
+
+    # data processing - image preprocessing
+    "numpy",
+    "opencv-python-headless",
+    "pillow",
+    "py360convert",
+
+    # data processing - mesh reconstruction
+    "open3d",
+
+    # carla sim
+    "carla",
+    "pygame",
+
+    # shared utilities
+    "requests",
+    "tqdm",
+    "pandas",
 ]
 
 [tool.uv.sources]
 mapanything = { path = "src/map_anything", editable = true }
+# Local carla installation path (Rethink this in the future possibly)
+carla = { path = "/home/fin/carla/Carla-0.10.0-Linux-Shipping/PythonAPI/carla/dist/carla-0.10.0-cp310-cp310-linux_x86_64.whl" }
 
 [project.scripts]
 urbanreconstruct = "src.main:main"
