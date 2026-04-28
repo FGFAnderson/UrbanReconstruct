@@ -6,7 +6,6 @@ requires-python = "==3.10.*"
 dependencies = [
     # pipelines
     "mapanything",
-
     # data acquisition - lidar (ea_lidar)
     "geopandas",
     "Fiona",
@@ -15,30 +14,51 @@ dependencies = [
     "selenium",
     "webdriver-manager",
     "chromedriver-binary",
-
     # data processing - image preprocessing
     "numpy",
     "opencv-python-headless",
     "pillow",
     "py360convert",
-
     # data processing - mesh reconstruction
     "open3d",
-
     # carla sim
     "carla",
     "pygame",
-
     # shared utilities
     "requests",
     "tqdm",
     "pandas",
+    "pycolmap",
+    "pyceres",
+    "h5py>=3.16.0",
+    "omegaconf>=2.3.0",
+    "scipy>=1.15.3",
+    "matplotlib>=3.10.8",
+    "cholespy>=2.2.0",
+    "plotly>=6.7.0",
+    "nbformat>=5.10.4",
+    "ipywidgets>=8.1.8",
+    "gdown>=6.0.0",
+    "timm>=1.0.26",
+    "plyfile>=1.1.3",
+    "onnxruntime>=1.23.2",
+    "einops>=0.8.2",
+    "geffnet>=1.0.2",
+    "pillow-heif>=1.3.0",
+    "lightglue",
+    "cupy-cuda13x>=14.0.1",
+    "mmengine>=0.10.7",
+    "mmcv>=2.2.0",
+    "html4vision>=0.6.1",
 ]
 
 [tool.uv.sources]
 mapanything = { path = "src/map_anything", editable = true }
 # Local carla installation path (Rethink this in the future possibly)
 carla = { path = "/home/fin/carla/Carla-0.10.0-Linux-Shipping/PythonAPI/carla/dist/carla-0.10.0-cp310-cp310-linux_x86_64.whl" }
+lightglue = { git = "https://github.com/cvg/LightGlue" }
+pycolmap = { path = "wheels/pycolmap-3.12.0.dev0-cp310-cp310-linux_x86_64.whl" }
+pyceres = { path = "wheels/pyceres-2.6-cp310-cp310-linux_x86_64.whl" }
 
 [project.scripts]
 urbanreconstruct = "src.main:main"

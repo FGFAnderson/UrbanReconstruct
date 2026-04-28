@@ -41,10 +41,9 @@ def prepare_images_for_colmap(input_dir: str, output_dir: str) -> None:
             print(f"Converting 360° image: {filename}")
             img = cv2.imread(input_path)
             
-            # Extract front, right, back, left images
-            for angle, direction in [(0, "front"), (90, "right"), (180, "back"), (270, "left")]:
-                view = py360convert.e2p(img, fov_deg=90, u_deg=angle, v_deg=0, out_hw=(1024, 1024), mode="bilinear")
-                output_name = f"{os.path.splitext(filename)[0]}_{direction}.jpg"
+            for u_deg, v_deg, face in [(0, 0, "front"), (90, 0, "right"), (180, 0, "back"), (270, 0, "left")]:
+                view = py360convert.e2p(img, fov_deg=90, u_deg=u_deg, v_deg=v_deg, out_hw=(1024, 1024), mode="bilinear")
+                output_name = f"{os.path.splitext(filename)[0]}_{face}.jpg"
                 cv2.imwrite(os.path.join(output_dir, output_name), view)
         else:
             print(f"Copying normal image: {filename}")
